@@ -1,0 +1,17 @@
+services:
+  bato-mysql:
+    image: mysql:8.4
+    container_name: bato-clinic-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: bato_root_password
+      MYSQL_DATABASE: bato_clinic_db
+      MYSQL_USER: bato_user
+      MYSQL_PASSWORD: bato_password
+    ports:
+      - "3307:3306"
+    volumes:
+      - bato_mysql_data:/var/lib/mysql
+
+volumes:
+  bato_mysql_data:

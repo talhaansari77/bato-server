@@ -143,7 +143,7 @@ public class AuthController : ControllerBase
     // GET /api/auth/me
     // Protected endpoint.
     // The mobile app sends JWT token, and this returns the logged-in user profile.
-    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [Authorize]
     [HttpGet("/api/auth/me")]
     public async Task<ActionResult<MeResponseDto>> GetMe()
     {

@@ -1,6 +1,7 @@
 using BatoClinic.Api.Data;
 using BatoClinic.Api.DTOs.Services;
 using BatoClinic.Api.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -77,6 +78,7 @@ public class ServicesController : ControllerBase
 
     // POST /api/services
     // Creates a new clinic service/treatment.
+    [Authorize(Roles = "Admin")]
     [HttpPost]
     public async Task<ActionResult<ClinicServiceResponseDto>> CreateService(CreateClinicServiceDto dto)
     {
@@ -143,6 +145,7 @@ public class ServicesController : ControllerBase
 
     // PATCH /api/services/{id}
     // Updates only the service fields sent by the client.
+    [Authorize(Roles = "Admin")]
     [HttpPatch("{id:guid}")]
     public async Task<ActionResult<ClinicServiceResponseDto>> UpdateService(Guid id, UpdateClinicServiceDto dto)
     {
@@ -230,6 +233,7 @@ public class ServicesController : ControllerBase
 
     // DELETE /api/services/{id}
     // Soft delete: marks service inactive instead of removing it from database.
+    [Authorize(Roles = "Admin")]
     [HttpDelete("{id:guid}")]
     public async Task<ActionResult> DeactivateService(Guid id)
     {

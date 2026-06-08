@@ -1,6 +1,7 @@
 using BatoClinic.Api.Data;
 using BatoClinic.Api.DTOs.ServiceCategories;
 using BatoClinic.Api.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -41,6 +42,7 @@ public class ServiceCategoriesController : ControllerBase
 
     // POST /api/service-categories
     // Creates a new category like Hair, Skin, or Face treatments.
+    [Authorize(Roles = "Admin")]
     [HttpPost]
     public async Task<ActionResult<ServiceCategoryResponseDto>> CreateCategory(CreateServiceCategoryDto dto)
     {

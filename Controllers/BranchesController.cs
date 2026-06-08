@@ -1,6 +1,7 @@
 using BatoClinic.Api.Data;
 using BatoClinic.Api.DTOs.Branches;
 using BatoClinic.Api.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -73,6 +74,7 @@ public class BranchesController : ControllerBase
 
     // POST /api/branches
     // Creates a new clinic branch.
+    [Authorize(Roles = "Admin")]
     [HttpPost]
     public async Task<ActionResult<BranchResponseDto>> CreateBranch(CreateBranchDto dto)
     {
@@ -129,6 +131,7 @@ public class BranchesController : ControllerBase
     // PATCH /api/branches/{id}
 // Updates an existing clinic branch.
 // PATCH is used because the admin may update only some fields.
+[Authorize(Roles = "Admin")]
 [HttpPatch("{id:guid}")]
 public async Task<ActionResult<BranchResponseDto>> UpdateBranch(Guid id, UpdateBranchDto dto)
 {
@@ -192,6 +195,7 @@ public async Task<ActionResult<BranchResponseDto>> UpdateBranch(Guid id, UpdateB
 // DELETE /api/branches/{id}
 // Soft deletes a branch by setting IsActive to false.
 // We do not remove it from the database because old appointments may still need branch history.
+[Authorize(Roles = "Admin")]
 [HttpDelete("{id:guid}")]
 public async Task<ActionResult> DeactivateBranch(Guid id)
 {

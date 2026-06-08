@@ -17,6 +17,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<ServiceCategory> ServiceCategories => Set<ServiceCategory>();
 
     public DbSet<ClinicService> ClinicServices => Set<ClinicService>();
+    public DbSet<DoctorProfile> DoctorProfiles => Set<DoctorProfile>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -53,6 +54,20 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
                 .WithMany(x => x.Services)
                 .HasForeignKey(x => x.ServiceCategoryId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // DoctorProfile table setup
+        builder.Entity<DoctorProfile>(entity =>
+        {
+            entity.Property(x => x.Specialization).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.LicenseNumber).HasMaxLength(100);
+            entity.Property(x => x.Bio).HasMaxLength(1000);
+            entity.Property(x => x.ConsultationFee).HasPrecision(10, 2);
+
+            entity.HasOne(x => x.User)
+                .WithOne()
+                .HasForeignKey<DoctorProfile>(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

@@ -17,6 +17,7 @@ public static class DbSeeder
 
         await SeedRolesAsync(roleManager);
         await SeedAdminUserAsync(userManager);
+        await SeedDoctorUserAsync(context, userManager);
         await SeedBranchesAsync(context);
         await SeedServiceCategoriesAndServicesAsync(context);
     }
@@ -65,6 +66,74 @@ public static class DbSeeder
         if (result.Succeeded)
         {
             await userManager.AddToRoleAsync(admin, "Admin");
+        }
+    }
+
+    private static async Task SeedDoctorUserAsync(
+    AppDbContext context,
+    UserManager<ApplicationUser> userManager)
+    {
+        const string doctorEmail = "doctor@batoclinic.com";
+        const string doctorPassword = "Password123!";
+
+        var existingDoctor = await userManager.FindByEmailAsync(doctorEmail);
+
+        if (existingDoctor is not null)
+        {
+            var existingProfile = await context.DoctorProfiles
+                .AnyAsync(profile => profile.UserId == existingDoctor.Id);
+
+            if (!existingProfile)
+            {
+                context.DoctorProfiles.Add(new DoctorProfile
+                {
+                    UserId = existingDoctor.Id,
+                    Specialization = "Dermatology & Aesthetic Medicine",
+                    LicenseNumber = "BATO-DR-001",
+                    ExperienceYears = 8,
+                    Bio = "Specialist in premium skin rejuvenation, facial treatments, and personalized medical beauty plans.",
+                    ConsultationFee = 25,
+                    IsAvailable = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+
+                await context.SaveChangesAsync();
+            }
+
+            return;
+        }
+
+        var doctor = new ApplicationUser
+        {
+            FullName = "Dr. Sarah Khan",
+            UserName = doctorEmail,
+            Email = doctorEmail,
+            EmailConfirmed = true,
+            PhoneNumber = "+96550000002",
+            RoleType = "Doctor",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var result = await userManager.CreateAsync(doctor, doctorPassword);
+
+        if (result.Succeeded)
+        {
+            await userManager.AddToRoleAsync(doctor, "Doctor");
+
+            context.DoctorProfiles.Add(new DoctorProfile
+            {
+                UserId = doctor.Id,
+                Specialization = "Dermatology & Aesthetic Medicine",
+                LicenseNumber = "BATO-DR-001",
+                ExperienceYears = 8,
+                Bio = "Specialist in premium skin rejuvenation, facial treatments, and personalized medical beauty plans.",
+                ConsultationFee = 25,
+                IsAvailable = true,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            await context.SaveChangesAsync();
         }
     }
 

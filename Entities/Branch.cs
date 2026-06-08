@@ -19,4 +19,6 @@ public class Branch
     public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public ICollection<DoctorBranch> DoctorBranches { get; set; } = new List<DoctorBranch>();
 }

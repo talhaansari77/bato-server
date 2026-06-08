@@ -25,4 +25,5 @@ public class ClinicService
     // Navigation property:
     // Each service belongs to one category.
     public ServiceCategory? ServiceCategory { get; set; }
+    public ICollection<DoctorService> DoctorServices { get; set; } = new List<DoctorService>();
 }

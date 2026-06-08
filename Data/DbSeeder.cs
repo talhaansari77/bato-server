@@ -20,6 +20,7 @@ public static class DbSeeder
         await SeedDoctorUserAsync(context, userManager);
         await SeedBranchesAsync(context);
         await SeedServiceCategoriesAndServicesAsync(context);
+        await SeedDoctorAssignmentsAsync(context, userManager);
     }
 
     private static async Task SeedRolesAsync(RoleManager<IdentityRole> roleManager)
@@ -232,6 +233,65 @@ public static class DbSeeder
         };
 
         context.ClinicServices.AddRange(services);
+        await context.SaveChangesAsync();
+    }
+    private static async Task SeedDoctorAssignmentsAsync(
+    AppDbContext context,
+    UserManager<ApplicationUser> userManager)
+    {
+        var doctorUser = await userManager.FindByEmailAsync("doctor@batoclinic.com");
+
+        if (doctorUser is null)
+        {
+            return;
+        }
+
+        var doctorProfile = await context.DoctorProfiles
+            .FirstOrDefaultAsync(profile => profile.UserId == doctorUser.Id);
+
+        if (doctorProfile is null)
+        {
+            return;
+        }
+
+        var branch = await context.Branches.FirstOrDefaultAsync();
+
+        if (branch is not null)
+        {
+            var hasDoctorBranch = await context.DoctorBranches
+                .AnyAsync(item =>
+                    item.DoctorProfileId == doctorProfile.Id &&
+                    item.BranchId == branch.Id);
+
+            if (!hasDoctorBranch)
+            {
+                context.DoctorBranches.Add(new DoctorBranch
+                {
+                    DoctorProfileId = doctorProfile.Id,
+                    BranchId = branch.Id
+                });
+            }
+        }
+
+        var services = await context.ClinicServices.ToListAsync();
+
+        foreach (var service in services)
+        {
+            var hasDoctorService = await context.DoctorServices
+                .AnyAsync(item =>
+                    item.DoctorProfileId == doctorProfile.Id &&
+                    item.ClinicServiceId == service.Id);
+
+            if (!hasDoctorService)
+            {
+                context.DoctorServices.Add(new DoctorService
+                {
+                    DoctorProfileId = doctorProfile.Id,
+                    ClinicServiceId = service.Id
+                });
+            }
+        }
+
         await context.SaveChangesAsync();
     }
 }

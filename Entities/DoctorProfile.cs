@@ -32,4 +32,6 @@ public class DoctorProfile
     // Navigation property.
     // This lets EF Core load the related Identity user.
     public ApplicationUser? User { get; set; }
+    public ICollection<DoctorBranch> DoctorBranches { get; set; } = new List<DoctorBranch>();
+    public ICollection<DoctorService> DoctorServices { get; set; } = new List<DoctorService>();
 }

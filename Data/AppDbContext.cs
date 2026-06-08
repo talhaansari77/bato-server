@@ -18,6 +18,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<ClinicService> ClinicServices => Set<ClinicService>();
     public DbSet<DoctorProfile> DoctorProfiles => Set<DoctorProfile>();
+    public DbSet<DoctorBranch> DoctorBranches => Set<DoctorBranch>();
+
+    public DbSet<DoctorService> DoctorServices => Set<DoctorService>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -67,6 +70,37 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.HasOne(x => x.User)
                 .WithOne()
                 .HasForeignKey<DoctorProfile>(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+        // DoctorBranch join table setup
+        builder.Entity<DoctorBranch>(entity =>
+        {
+            entity.HasIndex(x => new { x.DoctorProfileId, x.BranchId }).IsUnique();
+
+            entity.HasOne(x => x.DoctorProfile)
+                .WithMany(x => x.DoctorBranches)
+                .HasForeignKey(x => x.DoctorProfileId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Branch)
+                .WithMany(x => x.DoctorBranches)
+                .HasForeignKey(x => x.BranchId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // DoctorService join table setup
+        builder.Entity<DoctorService>(entity =>
+        {
+            entity.HasIndex(x => new { x.DoctorProfileId, x.ClinicServiceId }).IsUnique();
+
+            entity.HasOne(x => x.DoctorProfile)
+                .WithMany(x => x.DoctorServices)
+                .HasForeignKey(x => x.DoctorProfileId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.ClinicService)
+                .WithMany(x => x.DoctorServices)
+                .HasForeignKey(x => x.ClinicServiceId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

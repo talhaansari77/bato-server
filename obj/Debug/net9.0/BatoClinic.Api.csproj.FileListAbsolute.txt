@@ -130,3 +130,4 @@
 /Users/ultron/Documents/react-native/bato-clinic/server/BatoClinic.Api/obj/Debug/net9.0/BatoClinic.Api.pdb
 /Users/ultron/Documents/react-native/bato-clinic/server/BatoClinic.Api/obj/Debug/net9.0/BatoClinic.Api.genruntimeconfig.cache
 /Users/ultron/Documents/react-native/bato-clinic/server/BatoClinic.Api/obj/Debug/net9.0/ref/BatoClinic.Api.dll
+/Users/ultron/Documents/react-native/bato-clinic/server/BatoClinic.Api/obj/Debug/net9.0/BatoClinic.Api.sourcelink.json

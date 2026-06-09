@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("BatoClinic.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+04206547bbddf3bafb1dece68aad803053ebf6b2")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3a18d2dbcf4226fae1e9c7159f740423f75b11be")]
 [assembly: System.Reflection.AssemblyProductAttribute("BatoClinic.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("BatoClinic.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -300,4 +300,159 @@ public class AppointmentsController : ControllerBase
 
         return Ok(response);
     }
+
+
+    // PATCH /api/appointments/{id}/approve
+    // Admin-only endpoint.
+    // Used to approve pay-at-clinic appointments.
+    [Authorize(Roles = "Admin")]
+    [HttpPatch("{id:guid}/approve")]
+    public async Task<ActionResult<AppointmentResponseDto>> ApproveAppointment(Guid id)
+    {
+        var appointment = await _context.Appointments
+            .Include(item => item.PatientUser)
+            .Include(item => item.DoctorProfile)
+                .ThenInclude(doctor => doctor.User)
+            .Include(item => item.ClinicService)
+            .Include(item => item.Branch)
+            .FirstOrDefaultAsync(item => item.Id == id);
+
+        if (appointment is null)
+        {
+            return NotFound(new { message = "Appointment not found" });
+        }
+
+        if (appointment.Status != AppointmentStatus.PendingAdminApproval)
+        {
+            return BadRequest(new
+            {
+                message = "Only appointments pending admin approval can be approved"
+            });
+        }
+
+        appointment.Status = AppointmentStatus.Confirmed;
+        appointment.PaymentStatus = PaymentStatus.PayAtClinic;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(ToAppointmentResponse(appointment));
+    }
+
+    // PATCH /api/appointments/{id}/reject
+    // Admin-only endpoint.
+    // Used when admin rejects a pay-at-clinic appointment request.
+    [Authorize(Roles = "Admin")]
+    [HttpPatch("{id:guid}/reject")]
+    public async Task<ActionResult<AppointmentResponseDto>> RejectAppointment(
+        Guid id,
+        AppointmentActionDto dto)
+    {
+        var appointment = await _context.Appointments
+            .Include(item => item.PatientUser)
+            .Include(item => item.DoctorProfile)
+                .ThenInclude(doctor => doctor.User)
+            .Include(item => item.ClinicService)
+            .Include(item => item.Branch)
+            .FirstOrDefaultAsync(item => item.Id == id);
+
+        if (appointment is null)
+        {
+            return NotFound(new { message = "Appointment not found" });
+        }
+
+        if (appointment.Status != AppointmentStatus.PendingAdminApproval)
+        {
+            return BadRequest(new
+            {
+                message = "Only appointments pending admin approval can be rejected"
+            });
+        }
+
+        appointment.Status = AppointmentStatus.Rejected;
+        appointment.CancelReason = dto.Reason?.Trim();
+
+        await _context.SaveChangesAsync();
+
+        return Ok(ToAppointmentResponse(appointment));
+    }
+
+    // PATCH /api/appointments/{id}/cancel
+    // Patient can cancel own appointment.
+    // Admin can cancel any appointment.
+    [HttpPatch("{id:guid}/cancel")]
+    public async Task<ActionResult<AppointmentResponseDto>> CancelAppointment(
+        Guid id,
+        AppointmentActionDto dto)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var role = User.FindFirstValue(ClaimTypes.Role);
+
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return Unauthorized(new { message = "Invalid token" });
+        }
+
+        var appointment = await _context.Appointments
+            .Include(item => item.PatientUser)
+            .Include(item => item.DoctorProfile)
+                .ThenInclude(doctor => doctor.User)
+            .Include(item => item.ClinicService)
+            .Include(item => item.Branch)
+            .FirstOrDefaultAsync(item => item.Id == id);
+
+        if (appointment is null)
+        {
+            return NotFound(new { message = "Appointment not found" });
+        }
+
+        var isAdmin = role == "Admin";
+        var isOwner = appointment.PatientUserId == userId;
+
+        if (!isAdmin && !isOwner)
+        {
+            return Forbid();
+        }
+
+        if (appointment.Status is AppointmentStatus.Completed or AppointmentStatus.Cancelled)
+        {
+            return BadRequest(new
+            {
+                message = "This appointment cannot be cancelled"
+            });
+        }
+
+        appointment.Status = AppointmentStatus.Cancelled;
+        appointment.CancelReason = dto.Reason?.Trim();
+
+        await _context.SaveChangesAsync();
+
+        return Ok(ToAppointmentResponse(appointment));
+    }
+
+
+    // Converts Appointment entity into AppointmentResponseDto.
+    // This keeps API responses clean and avoids exposing full database entities.
+    private static AppointmentResponseDto ToAppointmentResponse(Appointment appointment)
+    {
+        return new AppointmentResponseDto
+        {
+            Id = appointment.Id,
+            PatientUserId = appointment.PatientUserId,
+            PatientName = appointment.PatientUser?.FullName ?? string.Empty,
+            DoctorProfileId = appointment.DoctorProfileId,
+            DoctorName = appointment.DoctorProfile?.User?.FullName ?? string.Empty,
+            ClinicServiceId = appointment.ClinicServiceId,
+            ServiceName = appointment.ClinicService?.Name ?? string.Empty,
+            BranchId = appointment.BranchId,
+            BranchName = appointment.Branch?.Name ?? string.Empty,
+            AppointmentDate = appointment.AppointmentDate,
+            StartTime = appointment.StartTime,
+            EndTime = appointment.EndTime,
+            Status = appointment.Status.ToString(),
+            PaymentStatus = appointment.PaymentStatus.ToString(),
+            PaymentMethod = appointment.PaymentMethod.ToString(),
+            Notes = appointment.Notes,
+            CreatedAt = appointment.CreatedAt
+        };
+    }
 }

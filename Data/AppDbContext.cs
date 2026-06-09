@@ -21,7 +21,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<DoctorBranch> DoctorBranches => Set<DoctorBranch>();
 
     public DbSet<DoctorService> DoctorServices => Set<DoctorService>();
-
+    public DbSet<Appointment> Appointments => Set<Appointment>();
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -102,6 +102,44 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
                 .WithMany(x => x.DoctorServices)
                 .HasForeignKey(x => x.ClinicServiceId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+        
+        // Appointment table setup
+        builder.Entity<Appointment>(entity =>
+        {
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.Property(x => x.CancelReason).HasMaxLength(500);
+
+            // Store enums as strings for readability in database.
+            entity.Property(x => x.Status).HasConversion<string>();
+            entity.Property(x => x.PaymentStatus).HasConversion<string>();
+            entity.Property(x => x.PaymentMethod).HasConversion<string>();
+
+            entity.HasOne(x => x.PatientUser)
+                .WithMany()
+                .HasForeignKey(x => x.PatientUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.DoctorProfile)
+                .WithMany()
+                .HasForeignKey(x => x.DoctorProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ClinicService)
+                .WithMany()
+                .HasForeignKey(x => x.ClinicServiceId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Branch)
+                .WithMany()
+                .HasForeignKey(x => x.BranchId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.PatientUserId);
+            entity.HasIndex(x => x.DoctorProfileId);
+            entity.HasIndex(x => x.BranchId);
+            entity.HasIndex(x => x.ClinicServiceId);
+            entity.HasIndex(x => x.AppointmentDate);
         });
     }
 }

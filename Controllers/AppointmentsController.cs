@@ -159,6 +159,116 @@ public class AppointmentsController : ControllerBase
         return CreatedAtAction(nameof(GetAppointmentById), new { id = appointment.Id }, response);
     }
 
+
+    // GET /api/appointments/available-slots?doctorProfileId={id}&clinicServiceId={id}&branchId={id}&date=2026-06-20
+    // Returns available appointment slots for selected doctor, service, branch, and date.
+    // For now, working hours are fixed: 9 AM to 6 PM.
+    // Later, we will create doctor availability tables.
+    [AllowAnonymous]
+    [HttpGet("available-slots")]
+    public async Task<ActionResult<IEnumerable<AvailableSlotDto>>> GetAvailableSlots(
+        [FromQuery] Guid doctorProfileId,
+        [FromQuery] Guid clinicServiceId,
+        [FromQuery] Guid branchId,
+        [FromQuery] DateTime date)
+    {
+        if (doctorProfileId == Guid.Empty || clinicServiceId == Guid.Empty || branchId == Guid.Empty)
+        {
+            return BadRequest(new
+            {
+                message = "doctorProfileId, clinicServiceId, and branchId are required"
+            });
+        }
+
+        var service = await _context.ClinicServices
+            .FirstOrDefaultAsync(service => service.Id == clinicServiceId && service.IsActive);
+
+        if (service is null)
+        {
+            return BadRequest(new { message = "Valid service is required" });
+        }
+
+        var branch = await _context.Branches
+            .FirstOrDefaultAsync(branch => branch.Id == branchId && branch.IsActive);
+
+        if (branch is null)
+        {
+            return BadRequest(new { message = "Valid branch is required" });
+        }
+
+        var doctor = await _context.DoctorProfiles
+            .Include(profile => profile.User)
+            .FirstOrDefaultAsync(profile =>
+                profile.Id == doctorProfileId &&
+                profile.IsAvailable &&
+                profile.User != null &&
+                profile.User.IsActive);
+
+        if (doctor is null)
+        {
+            return BadRequest(new { message = "Valid doctor is required" });
+        }
+
+        var doctorCanDoService = await _context.DoctorServices.AnyAsync(item =>
+            item.DoctorProfileId == doctorProfileId &&
+            item.ClinicServiceId == clinicServiceId);
+
+        if (!doctorCanDoService)
+        {
+            return BadRequest(new { message = "Selected doctor does not perform this service" });
+        }
+
+        var doctorWorksAtBranch = await _context.DoctorBranches.AnyAsync(item =>
+            item.DoctorProfileId == doctorProfileId &&
+            item.BranchId == branchId);
+
+        if (!doctorWorksAtBranch)
+        {
+            return BadRequest(new { message = "Selected doctor does not work at this branch" });
+        }
+
+        var selectedDate = date.Date;
+
+        var dayStart = selectedDate.AddHours(9);
+        var dayEnd = selectedDate.AddHours(18);
+
+        var existingAppointments = await _context.Appointments
+            .Where(appointment =>
+                appointment.DoctorProfileId == doctorProfileId &&
+                appointment.AppointmentDate == selectedDate &&
+                appointment.Status != AppointmentStatus.Cancelled &&
+                appointment.Status != AppointmentStatus.Rejected &&
+                appointment.Status != AppointmentStatus.Refunded)
+            .ToListAsync();
+
+        var slots = new List<AvailableSlotDto>();
+
+        var currentStart = dayStart;
+
+        while (currentStart.AddMinutes(service.DurationMinutes) <= dayEnd)
+        {
+            var currentEnd = currentStart.AddMinutes(service.DurationMinutes);
+
+            var hasConflict = existingAppointments.Any(appointment =>
+                currentStart < appointment.EndTime &&
+                currentEnd > appointment.StartTime);
+
+            slots.Add(new AvailableSlotDto
+            {
+                StartTime = currentStart,
+                EndTime = currentEnd,
+                IsAvailable = !hasConflict
+            });
+
+            // Move to next slot.
+            // For now, we move by service duration.
+            // Later we can support custom slot intervals like every 15 or 30 minutes.
+            currentStart = currentStart.AddMinutes(service.DurationMinutes);
+        }
+
+        return Ok(slots);
+    }
+
     // GET /api/appointments/my
     // Returns logged-in patient's own appointments.
     [HttpGet("my")]

@@ -25,6 +25,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<PatientProfile> PatientProfiles => Set<PatientProfile>();
     public DbSet<TreatmentPlan> TreatmentPlans => Set<TreatmentPlan>();
     public DbSet<TreatmentSession> TreatmentSessions => Set<TreatmentSession>();
+    public DbSet<MedicalRecord> MedicalRecords => Set<MedicalRecord>();
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -205,6 +206,35 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
             entity.HasIndex(x => x.TreatmentPlanId);
             entity.HasIndex(x => x.AppointmentId);
+        });
+
+        // MedicalRecord table setup
+        builder.Entity<MedicalRecord>(entity =>
+        {
+            entity.Property(x => x.Diagnosis).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.Prescription).HasMaxLength(2000);
+            entity.Property(x => x.FollowUpInstructions).HasMaxLength(1000);
+
+            entity.HasOne(x => x.PatientProfile)
+                .WithMany()
+                .HasForeignKey(x => x.PatientProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.DoctorProfile)
+                .WithMany()
+                .HasForeignKey(x => x.DoctorProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Appointment)
+                .WithMany()
+                .HasForeignKey(x => x.AppointmentId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => x.PatientProfileId);
+            entity.HasIndex(x => x.DoctorProfileId);
+            entity.HasIndex(x => x.AppointmentId);
+            entity.HasIndex(x => x.RecordDate);
         });
     }
 }

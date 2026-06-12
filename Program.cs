@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using BatoClinic.Api.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -146,6 +147,8 @@ builder.Services
     });
 
 var app = builder.Build();
+// Catches unexpected exceptions and returns clean JSON errors.
+app.UseMiddleware<ExceptionMiddleware>();
 
 // Runs database migrations and inserts default BATO data.
 // This creates roles, admin user, branch, categories, and sample services.

@@ -284,7 +284,7 @@ public class AppointmentsController : ControllerBase
         var appointments = await _context.Appointments
             .Where(appointment => appointment.PatientUserId == userId)
             .Include(appointment => appointment.PatientUser)
-            .Include(appointment => appointment.DoctorProfile)
+            .Include(appointment => appointment.DoctorProfile!)
                 .ThenInclude(doctor => doctor.User)
             .Include(appointment => appointment.ClinicService)
             .Include(appointment => appointment.Branch)
@@ -324,7 +324,7 @@ public class AppointmentsController : ControllerBase
     {
         var appointments = await _context.Appointments
             .Include(appointment => appointment.PatientUser)
-            .Include(appointment => appointment.DoctorProfile)
+            .Include(appointment => appointment.DoctorProfile!)
                 .ThenInclude(doctor => doctor.User)
             .Include(appointment => appointment.ClinicService)
             .Include(appointment => appointment.Branch)
@@ -371,7 +371,7 @@ public class AppointmentsController : ControllerBase
 
         var appointment = await _context.Appointments
             .Include(item => item.PatientUser)
-            .Include(item => item.DoctorProfile)
+            .Include(item => item.DoctorProfile!)
                 .ThenInclude(doctor => doctor.User)
             .Include(item => item.ClinicService)
             .Include(item => item.Branch)
@@ -411,6 +411,65 @@ public class AppointmentsController : ControllerBase
         return Ok(response);
     }
 
+    // GET /api/appointments/doctor/my
+// Doctor endpoint.
+// Returns appointments assigned to the logged-in doctor.
+[Authorize(Roles = "Doctor")]
+[HttpGet("doctor/my")]
+public async Task<ActionResult<IEnumerable<AppointmentResponseDto>>> GetMyDoctorAppointments()
+{
+    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+    if (string.IsNullOrWhiteSpace(userId))
+    {
+        return Unauthorized(new { message = "Invalid token" });
+    }
+
+    // First, find the doctor profile connected to the logged-in Identity user.
+    var doctorProfile = await _context.DoctorProfiles
+        .FirstOrDefaultAsync(profile => profile.UserId == userId);
+
+    if (doctorProfile is null)
+    {
+        return NotFound(new { message = "Doctor profile not found" });
+    }
+
+    // Then load appointments assigned to that doctor profile.
+    var appointments = await _context.Appointments
+        .Where(appointment => appointment.DoctorProfileId == doctorProfile.Id)
+        .Include(appointment => appointment.PatientUser)
+        .Include(appointment => appointment.DoctorProfile!)
+            .ThenInclude(doctor => doctor.User)
+        .Include(appointment => appointment.ClinicService)
+        .Include(appointment => appointment.Branch)
+        .OrderByDescending(appointment => appointment.StartTime)
+        .Select(appointment => new AppointmentResponseDto
+        {
+            Id = appointment.Id,
+            PatientUserId = appointment.PatientUserId,
+            PatientName = appointment.PatientUser != null ? appointment.PatientUser.FullName : string.Empty,
+            DoctorProfileId = appointment.DoctorProfileId,
+            DoctorName = appointment.DoctorProfile != null && appointment.DoctorProfile.User != null
+                ? appointment.DoctorProfile.User.FullName
+                : string.Empty,
+            ClinicServiceId = appointment.ClinicServiceId,
+            ServiceName = appointment.ClinicService != null ? appointment.ClinicService.Name : string.Empty,
+            BranchId = appointment.BranchId,
+            BranchName = appointment.Branch != null ? appointment.Branch.Name : string.Empty,
+            AppointmentDate = appointment.AppointmentDate,
+            StartTime = appointment.StartTime,
+            EndTime = appointment.EndTime,
+            Status = appointment.Status.ToString(),
+            PaymentStatus = appointment.PaymentStatus.ToString(),
+            PaymentMethod = appointment.PaymentMethod.ToString(),
+            Notes = appointment.Notes,
+            CreatedAt = appointment.CreatedAt
+        })
+        .ToListAsync();
+
+    return Ok(appointments);
+}
+
 
     // PATCH /api/appointments/{id}/approve
     // Admin-only endpoint.
@@ -421,7 +480,7 @@ public class AppointmentsController : ControllerBase
     {
         var appointment = await _context.Appointments
             .Include(item => item.PatientUser)
-            .Include(item => item.DoctorProfile)
+            .Include(item => item.DoctorProfile!)
                 .ThenInclude(doctor => doctor.User)
             .Include(item => item.ClinicService)
             .Include(item => item.Branch)
@@ -459,7 +518,7 @@ public class AppointmentsController : ControllerBase
     {
         var appointment = await _context.Appointments
             .Include(item => item.PatientUser)
-            .Include(item => item.DoctorProfile)
+            .Include(item => item.DoctorProfile!)
                 .ThenInclude(doctor => doctor.User)
             .Include(item => item.ClinicService)
             .Include(item => item.Branch)
@@ -504,7 +563,7 @@ public class AppointmentsController : ControllerBase
 
         var appointment = await _context.Appointments
             .Include(item => item.PatientUser)
-            .Include(item => item.DoctorProfile)
+            .Include(item => item.DoctorProfile!)
                 .ThenInclude(doctor => doctor.User)
             .Include(item => item.ClinicService)
             .Include(item => item.Branch)
@@ -557,7 +616,7 @@ public class AppointmentsController : ControllerBase
 
         var appointment = await _context.Appointments
             .Include(item => item.PatientUser)
-            .Include(item => item.DoctorProfile)
+            .Include(item => item.DoctorProfile!)
                 .ThenInclude(doctor => doctor.User)
             .Include(item => item.ClinicService)
             .Include(item => item.Branch)

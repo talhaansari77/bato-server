@@ -429,6 +429,109 @@ public class AppointmentsController : ControllerBase
         return Ok(ToAppointmentResponse(appointment));
     }
 
+    // PATCH /api/appointments/{id}/reschedule
+    // Patient can reschedule own appointment.
+    // Admin can reschedule any appointment.
+    [HttpPatch("{id:guid}/reschedule")]
+    public async Task<ActionResult<AppointmentResponseDto>> RescheduleAppointment(
+        Guid id,
+        RescheduleAppointmentDto dto)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var role = User.FindFirstValue(ClaimTypes.Role);
+
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return Unauthorized(new { message = "Invalid token" });
+        }
+
+        var appointment = await _context.Appointments
+            .Include(item => item.PatientUser)
+            .Include(item => item.DoctorProfile)
+                .ThenInclude(doctor => doctor.User)
+            .Include(item => item.ClinicService)
+            .Include(item => item.Branch)
+            .FirstOrDefaultAsync(item => item.Id == id);
+
+        if (appointment is null)
+        {
+            return NotFound(new { message = "Appointment not found" });
+        }
+
+        var isAdmin = role == "Admin";
+        var isOwner = appointment.PatientUserId == userId;
+
+        if (!isAdmin && !isOwner)
+        {
+            return Forbid();
+        }
+
+        if (appointment.Status is
+            AppointmentStatus.Completed or
+            AppointmentStatus.Cancelled or
+            AppointmentStatus.Rejected or
+            AppointmentStatus.Refunded)
+        {
+            return BadRequest(new
+            {
+                message = "This appointment cannot be rescheduled"
+            });
+        }
+
+        if (dto.NewStartTime <= DateTime.UtcNow)
+        {
+            return BadRequest(new
+            {
+                message = "New appointment time must be in the future"
+            });
+        }
+
+        if (appointment.ClinicService is null)
+        {
+            return BadRequest(new
+            {
+                message = "Appointment service data is missing"
+            });
+        }
+
+        var newStartTime = dto.NewStartTime;
+        var newEndTime = newStartTime.AddMinutes(appointment.ClinicService.DurationMinutes);
+
+        var hasConflict = await _context.Appointments.AnyAsync(existingAppointment =>
+            existingAppointment.Id != appointment.Id &&
+            existingAppointment.DoctorProfileId == appointment.DoctorProfileId &&
+            existingAppointment.Status != AppointmentStatus.Cancelled &&
+            existingAppointment.Status != AppointmentStatus.Rejected &&
+            existingAppointment.Status != AppointmentStatus.Refunded &&
+            newStartTime < existingAppointment.EndTime &&
+            newEndTime > existingAppointment.StartTime);
+
+        if (hasConflict)
+        {
+            return BadRequest(new
+            {
+                message = "Selected time slot is not available"
+            });
+        }
+
+        appointment.AppointmentDate = newStartTime.Date;
+        appointment.StartTime = newStartTime;
+        appointment.EndTime = newEndTime;
+        appointment.Status = AppointmentStatus.Rescheduled;
+
+        if (!string.IsNullOrWhiteSpace(dto.Reason))
+        {
+            appointment.Notes = string.IsNullOrWhiteSpace(appointment.Notes)
+                ? $"Reschedule reason: {dto.Reason.Trim()}"
+                : $"{appointment.Notes}\nReschedule reason: {dto.Reason.Trim()}";
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(ToAppointmentResponse(appointment));
+    }
+
+
 
     // Converts Appointment entity into AppointmentResponseDto.
     // This keeps API responses clean and avoids exposing full database entities.

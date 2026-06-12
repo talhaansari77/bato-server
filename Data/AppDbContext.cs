@@ -26,6 +26,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<TreatmentPlan> TreatmentPlans => Set<TreatmentPlan>();
     public DbSet<TreatmentSession> TreatmentSessions => Set<TreatmentSession>();
     public DbSet<MedicalRecord> MedicalRecords => Set<MedicalRecord>();
+    public DbSet<ProgressPhoto> ProgressPhotos => Set<ProgressPhoto>();
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -236,5 +237,27 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(x => x.AppointmentId);
             entity.HasIndex(x => x.RecordDate);
         });
+
+        // ProgressPhoto table setup
+builder.Entity<ProgressPhoto>(entity =>
+{
+    entity.Property(x => x.ImageUrl).HasMaxLength(500).IsRequired();
+    entity.Property(x => x.PhotoType).HasMaxLength(50).IsRequired();
+    entity.Property(x => x.Notes).HasMaxLength(500);
+
+    entity.HasOne(x => x.PatientProfile)
+        .WithMany()
+        .HasForeignKey(x => x.PatientProfileId)
+        .OnDelete(DeleteBehavior.Cascade);
+
+    entity.HasOne(x => x.TreatmentPlan)
+        .WithMany()
+        .HasForeignKey(x => x.TreatmentPlanId)
+        .OnDelete(DeleteBehavior.SetNull);
+
+    entity.HasIndex(x => x.PatientProfileId);
+    entity.HasIndex(x => x.TreatmentPlanId);
+    entity.HasIndex(x => x.TakenAt);
+});
     }
 }

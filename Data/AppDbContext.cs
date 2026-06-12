@@ -23,6 +23,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<DoctorService> DoctorServices => Set<DoctorService>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<PatientProfile> PatientProfiles => Set<PatientProfile>();
+    public DbSet<TreatmentPlan> TreatmentPlans => Set<TreatmentPlan>();
+    public DbSet<TreatmentSession> TreatmentSessions => Set<TreatmentSession>();
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -144,17 +146,65 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         });
 
         // PatientProfile table setup
-builder.Entity<PatientProfile>(entity =>
-{
-    entity.Property(x => x.Gender).HasMaxLength(30);
-    entity.Property(x => x.EmergencyContactName).HasMaxLength(150);
-    entity.Property(x => x.EmergencyContactPhone).HasMaxLength(30);
-    entity.Property(x => x.MedicalNotes).HasMaxLength(1000);
+        builder.Entity<PatientProfile>(entity =>
+        {
+            entity.Property(x => x.Gender).HasMaxLength(30);
+            entity.Property(x => x.EmergencyContactName).HasMaxLength(150);
+            entity.Property(x => x.EmergencyContactPhone).HasMaxLength(30);
+            entity.Property(x => x.MedicalNotes).HasMaxLength(1000);
 
-    entity.HasOne(x => x.User)
-        .WithOne()
-        .HasForeignKey<PatientProfile>(x => x.UserId)
-        .OnDelete(DeleteBehavior.Cascade);
-});
+            entity.HasOne(x => x.User)
+                .WithOne()
+                .HasForeignKey<PatientProfile>(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+
+        // TreatmentPlan table setup
+        builder.Entity<TreatmentPlan>(entity =>
+        {
+            entity.Property(x => x.Title).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(50).IsRequired();
+
+            entity.HasOne(x => x.PatientProfile)
+                .WithMany()
+                .HasForeignKey(x => x.PatientProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.DoctorProfile)
+                .WithMany()
+                .HasForeignKey(x => x.DoctorProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Appointment)
+                .WithMany()
+                .HasForeignKey(x => x.AppointmentId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => x.PatientProfileId);
+            entity.HasIndex(x => x.DoctorProfileId);
+            entity.HasIndex(x => x.AppointmentId);
+        });
+
+        // TreatmentSession table setup
+        builder.Entity<TreatmentSession>(entity =>
+        {
+            entity.Property(x => x.Status).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+
+            entity.HasOne(x => x.TreatmentPlan)
+                .WithMany(x => x.Sessions)
+                .HasForeignKey(x => x.TreatmentPlanId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Appointment)
+                .WithMany()
+                .HasForeignKey(x => x.AppointmentId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => x.TreatmentPlanId);
+            entity.HasIndex(x => x.AppointmentId);
+        });
     }
 }

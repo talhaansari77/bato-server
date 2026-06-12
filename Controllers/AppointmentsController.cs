@@ -412,64 +412,184 @@ public class AppointmentsController : ControllerBase
     }
 
     // GET /api/appointments/doctor/my
-// Doctor endpoint.
-// Returns appointments assigned to the logged-in doctor.
-[Authorize(Roles = "Doctor")]
-[HttpGet("doctor/my")]
-public async Task<ActionResult<IEnumerable<AppointmentResponseDto>>> GetMyDoctorAppointments()
+    // Doctor endpoint.
+    // Returns appointments assigned to the logged-in doctor.
+    [Authorize(Roles = "Doctor")]
+    [HttpGet("doctor/my")]
+    public async Task<ActionResult<IEnumerable<AppointmentResponseDto>>> GetMyDoctorAppointments()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return Unauthorized(new { message = "Invalid token" });
+        }
+
+        // First, find the doctor profile connected to the logged-in Identity user.
+        var doctorProfile = await _context.DoctorProfiles
+            .FirstOrDefaultAsync(profile => profile.UserId == userId);
+
+        if (doctorProfile is null)
+        {
+            return NotFound(new { message = "Doctor profile not found" });
+        }
+
+        // Then load appointments assigned to that doctor profile.
+        var appointments = await _context.Appointments
+            .Where(appointment => appointment.DoctorProfileId == doctorProfile.Id)
+            .Include(appointment => appointment.PatientUser)
+            .Include(appointment => appointment.DoctorProfile!)
+                .ThenInclude(doctor => doctor.User)
+            .Include(appointment => appointment.ClinicService)
+            .Include(appointment => appointment.Branch)
+            .OrderByDescending(appointment => appointment.StartTime)
+            .Select(appointment => new AppointmentResponseDto
+            {
+                Id = appointment.Id,
+                PatientUserId = appointment.PatientUserId,
+                PatientName = appointment.PatientUser != null ? appointment.PatientUser.FullName : string.Empty,
+                DoctorProfileId = appointment.DoctorProfileId,
+                DoctorName = appointment.DoctorProfile != null && appointment.DoctorProfile.User != null
+                    ? appointment.DoctorProfile.User.FullName
+                    : string.Empty,
+                ClinicServiceId = appointment.ClinicServiceId,
+                ServiceName = appointment.ClinicService != null ? appointment.ClinicService.Name : string.Empty,
+                BranchId = appointment.BranchId,
+                BranchName = appointment.Branch != null ? appointment.Branch.Name : string.Empty,
+                AppointmentDate = appointment.AppointmentDate,
+                StartTime = appointment.StartTime,
+                EndTime = appointment.EndTime,
+                Status = appointment.Status.ToString(),
+                PaymentStatus = appointment.PaymentStatus.ToString(),
+                PaymentMethod = appointment.PaymentMethod.ToString(),
+                Notes = appointment.Notes,
+                CreatedAt = appointment.CreatedAt
+            })
+            .ToListAsync();
+
+        return Ok(appointments);
+    }
+
+
+    // PATCH /api/appointments/{id}/complete
+    // Doctor can complete their own appointment.
+    // Admin can complete any appointment.
+    [Authorize(Roles = "Doctor,Admin")]
+    [HttpPatch("{id:guid}/complete")]
+    public async Task<ActionResult<AppointmentResponseDto>> CompleteAppointment(Guid id)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var role = User.FindFirstValue(ClaimTypes.Role);
+
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return Unauthorized(new { message = "Invalid token" });
+        }
+
+        var appointment = await _context.Appointments
+            .Include(item => item.PatientUser)
+            .Include(item => item.DoctorProfile!)
+                .ThenInclude(doctor => doctor.User)
+            .Include(item => item.ClinicService)
+            .Include(item => item.Branch)
+            .FirstOrDefaultAsync(item => item.Id == id);
+
+        if (appointment is null)
+        {
+            return NotFound(new { message = "Appointment not found" });
+        }
+
+        var isAdmin = role == "Admin";
+
+        if (!isAdmin)
+        {
+            var doctorProfile = await _context.DoctorProfiles
+                .FirstOrDefaultAsync(profile => profile.UserId == userId);
+
+            if (doctorProfile is null || appointment.DoctorProfileId != doctorProfile.Id)
+            {
+                return Forbid();
+            }
+        }
+
+        if (appointment.Status is
+            AppointmentStatus.Cancelled or
+            AppointmentStatus.Rejected or
+            AppointmentStatus.Refunded or
+            AppointmentStatus.Completed)
+        {
+            return BadRequest(new
+            {
+                message = "This appointment cannot be completed"
+            });
+        }
+
+        appointment.Status = AppointmentStatus.Completed;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(ToAppointmentResponse(appointment));
+    }
+
+    // PATCH /api/appointments/{id}/no-show
+// Doctor can mark their own appointment as no-show.
+// Admin can mark any appointment as no-show.
+[Authorize(Roles = "Doctor,Admin")]
+[HttpPatch("{id:guid}/no-show")]
+public async Task<ActionResult<AppointmentResponseDto>> MarkAppointmentNoShow(Guid id)
 {
     var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    var role = User.FindFirstValue(ClaimTypes.Role);
 
     if (string.IsNullOrWhiteSpace(userId))
     {
         return Unauthorized(new { message = "Invalid token" });
     }
 
-    // First, find the doctor profile connected to the logged-in Identity user.
-    var doctorProfile = await _context.DoctorProfiles
-        .FirstOrDefaultAsync(profile => profile.UserId == userId);
+    var appointment = await _context.Appointments
+        .Include(item => item.PatientUser)
+        .Include(item => item.DoctorProfile!)
+            .ThenInclude(doctor => doctor.User)
+        .Include(item => item.ClinicService)
+        .Include(item => item.Branch)
+        .FirstOrDefaultAsync(item => item.Id == id);
 
-    if (doctorProfile is null)
+    if (appointment is null)
     {
-        return NotFound(new { message = "Doctor profile not found" });
+        return NotFound(new { message = "Appointment not found" });
     }
 
-    // Then load appointments assigned to that doctor profile.
-    var appointments = await _context.Appointments
-        .Where(appointment => appointment.DoctorProfileId == doctorProfile.Id)
-        .Include(appointment => appointment.PatientUser)
-        .Include(appointment => appointment.DoctorProfile!)
-            .ThenInclude(doctor => doctor.User)
-        .Include(appointment => appointment.ClinicService)
-        .Include(appointment => appointment.Branch)
-        .OrderByDescending(appointment => appointment.StartTime)
-        .Select(appointment => new AppointmentResponseDto
+    var isAdmin = role == "Admin";
+
+    if (!isAdmin)
+    {
+        var doctorProfile = await _context.DoctorProfiles
+            .FirstOrDefaultAsync(profile => profile.UserId == userId);
+
+        if (doctorProfile is null || appointment.DoctorProfileId != doctorProfile.Id)
         {
-            Id = appointment.Id,
-            PatientUserId = appointment.PatientUserId,
-            PatientName = appointment.PatientUser != null ? appointment.PatientUser.FullName : string.Empty,
-            DoctorProfileId = appointment.DoctorProfileId,
-            DoctorName = appointment.DoctorProfile != null && appointment.DoctorProfile.User != null
-                ? appointment.DoctorProfile.User.FullName
-                : string.Empty,
-            ClinicServiceId = appointment.ClinicServiceId,
-            ServiceName = appointment.ClinicService != null ? appointment.ClinicService.Name : string.Empty,
-            BranchId = appointment.BranchId,
-            BranchName = appointment.Branch != null ? appointment.Branch.Name : string.Empty,
-            AppointmentDate = appointment.AppointmentDate,
-            StartTime = appointment.StartTime,
-            EndTime = appointment.EndTime,
-            Status = appointment.Status.ToString(),
-            PaymentStatus = appointment.PaymentStatus.ToString(),
-            PaymentMethod = appointment.PaymentMethod.ToString(),
-            Notes = appointment.Notes,
-            CreatedAt = appointment.CreatedAt
-        })
-        .ToListAsync();
+            return Forbid();
+        }
+    }
 
-    return Ok(appointments);
+    if (appointment.Status is
+        AppointmentStatus.Cancelled or
+        AppointmentStatus.Rejected or
+        AppointmentStatus.Refunded or
+        AppointmentStatus.Completed)
+    {
+        return BadRequest(new
+        {
+            message = "This appointment cannot be marked as no-show"
+        });
+    }
+
+    appointment.Status = AppointmentStatus.NoShow;
+
+    await _context.SaveChangesAsync();
+
+    return Ok(ToAppointmentResponse(appointment));
 }
-
 
     // PATCH /api/appointments/{id}/approve
     // Admin-only endpoint.

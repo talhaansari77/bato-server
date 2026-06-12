@@ -12,13 +12,68 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// CORS controls which frontend apps can call this backend.
+// For local development, we allow common local frontend/mobile URLs.
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("BatoCorsPolicy", policy =>
+    {
+        policy
+            .WithOrigins(
+                "http://localhost:3000",
+                "http://localhost:5173",
+                "http://localhost:8081",
+                "http://127.0.0.1:3000",
+                "http://127.0.0.1:5173",
+                "http://127.0.0.1:8081"
+            )
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
+
 // Adds controller support.
 // Controllers are classes that expose API endpoints.
 builder.Services.AddControllers();
 
 // Adds Swagger API documentation/testing page.
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "BATO Clinic API",
+        Version = "v1",
+        Description = "Backend API for BATO Clinic mobile app"
+    });
+
+    // Adds JWT Bearer authorization support to Swagger.
+    options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Description = "Enter your JWT token here. Example: Bearer eyJhbGciOi..."
+    });
+
+    // Tells Swagger to apply the Bearer token to protected endpoints.
+    options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
 
 // Reads the MySQL connection string from appsettings.json.
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -113,7 +168,8 @@ if (app.Environment.IsDevelopment())
 
 // Disabled for local development to avoid HTTPS port warning.
 // app.UseHttpsRedirection();
-
+// CORS should run before Authentication/Authorization for API requests.
+app.UseCors("BatoCorsPolicy");
 // Authentication must come before Authorization.
 app.UseAuthentication();
 app.UseAuthorization();

@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using BatoClinic.Api.Entities;
+using System.Security.Claims;
+
 
 namespace BatoClinic.Api.Controllers;
 
@@ -84,6 +86,82 @@ public class DoctorsController : ControllerBase
         }
 
         return Ok(doctor);
+    }
+
+    // GET /api/doctors/me
+    // Doctor can view their own professional profile.
+    [Authorize(Roles = "Doctor")]
+    [HttpGet("me")]
+    public async Task<ActionResult<DoctorResponseDto>> GetMyDoctorProfile()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return Unauthorized(new { message = "Invalid token" });
+        }
+
+        var doctor = await _context.DoctorProfiles
+            .Include(profile => profile.User)
+            .FirstOrDefaultAsync(profile => profile.UserId == userId);
+
+        if (doctor is null)
+        {
+            return NotFound(new { message = "Doctor profile not found" });
+        }
+
+        return Ok(ToDoctorResponse(doctor));
+    }
+
+    // PATCH /api/doctors/me
+    // Doctor can update their own profile.
+    [Authorize(Roles = "Doctor")]
+    [HttpPatch("me")]
+    public async Task<ActionResult<DoctorResponseDto>> UpdateMyDoctorProfile(UpdateDoctorProfileDto dto)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return Unauthorized(new { message = "Invalid token" });
+        }
+
+        var doctor = await _context.DoctorProfiles
+            .Include(profile => profile.User)
+            .FirstOrDefaultAsync(profile => profile.UserId == userId);
+
+        if (doctor is null || doctor.User is null)
+        {
+            return NotFound(new { message = "Doctor profile not found" });
+        }
+
+        ApplyDoctorProfileUpdates(doctor, dto);
+
+        await _context.SaveChangesAsync();
+
+        return Ok(ToDoctorResponse(doctor));
+    }
+
+    // PATCH /api/doctors/{id}
+    // Admin can update any doctor profile.
+    [Authorize(Roles = "Admin")]
+    [HttpPatch("{id:guid}")]
+    public async Task<ActionResult<DoctorResponseDto>> UpdateDoctorProfile(Guid id, UpdateDoctorProfileDto dto)
+    {
+        var doctor = await _context.DoctorProfiles
+            .Include(profile => profile.User)
+            .FirstOrDefaultAsync(profile => profile.Id == id);
+
+        if (doctor is null || doctor.User is null)
+        {
+            return NotFound(new { message = "Doctor profile not found" });
+        }
+
+        ApplyDoctorProfileUpdates(doctor, dto);
+
+        await _context.SaveChangesAsync();
+
+        return Ok(ToDoctorResponse(doctor));
     }
 
     // GET /api/doctors/available?serviceId={serviceId}&branchId={branchId}
@@ -211,5 +289,95 @@ public class DoctorsController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok(new { message = "Doctor services updated successfully" });
+    }
+
+
+
+
+
+
+
+    // Converts DoctorProfile entity into DoctorResponseDto.
+    // This keeps controller responses clean and avoids exposing Identity internals.
+    private static DoctorResponseDto ToDoctorResponse(DoctorProfile profile)
+    {
+        return new DoctorResponseDto
+        {
+            Id = profile.Id,
+            UserId = profile.UserId,
+            FullName = profile.User?.FullName ?? string.Empty,
+            Email = profile.User?.Email,
+            PhoneNumber = profile.User?.PhoneNumber,
+            AvatarUrl = profile.User?.AvatarUrl,
+            Specialization = profile.Specialization,
+            LicenseNumber = profile.LicenseNumber,
+            ExperienceYears = profile.ExperienceYears,
+            Bio = profile.Bio,
+            ConsultationFee = profile.ConsultationFee,
+            IsAvailable = profile.IsAvailable,
+            CreatedAt = profile.CreatedAt
+        };
+    }
+
+    // Applies update DTO values to doctor profile.
+    // Nullable fields mean we only update fields that were sent.
+    private static void ApplyDoctorProfileUpdates(
+        DoctorProfile doctor,
+        UpdateDoctorProfileDto dto)
+    {
+        if (doctor.User is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(dto.FullName))
+            {
+                doctor.User.FullName = dto.FullName.Trim();
+            }
+
+            if (dto.PhoneNumber is not null)
+            {
+                doctor.User.PhoneNumber = dto.PhoneNumber.Trim();
+            }
+
+            if (dto.AvatarUrl is not null)
+            {
+                doctor.User.AvatarUrl = dto.AvatarUrl.Trim();
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(dto.Specialization))
+        {
+            doctor.Specialization = dto.Specialization.Trim();
+        }
+
+        if (dto.LicenseNumber is not null)
+        {
+            doctor.LicenseNumber = dto.LicenseNumber.Trim();
+        }
+
+        if (dto.ExperienceYears.HasValue)
+        {
+            if (dto.ExperienceYears.Value < 0)
+            {
+                dto.ExperienceYears = 0;
+            }
+
+            doctor.ExperienceYears = dto.ExperienceYears.Value;
+        }
+
+        if (dto.Bio is not null)
+        {
+            doctor.Bio = dto.Bio.Trim();
+        }
+
+        if (dto.ConsultationFee.HasValue)
+        {
+            doctor.ConsultationFee = dto.ConsultationFee.Value < 0
+                ? 0
+                : dto.ConsultationFee.Value;
+        }
+
+        if (dto.IsAvailable.HasValue)
+        {
+            doctor.IsAvailable = dto.IsAvailable.Value;
+        }
     }
 }

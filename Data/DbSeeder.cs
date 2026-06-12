@@ -18,6 +18,7 @@ public static class DbSeeder
         await SeedRolesAsync(roleManager);
         await SeedAdminUserAsync(userManager);
         await SeedDoctorUserAsync(context, userManager);
+        await SeedPatientUserAsync(context, userManager);
         await SeedBranchesAsync(context);
         await SeedServiceCategoriesAndServicesAsync(context);
         await SeedDoctorAssignmentsAsync(context, userManager);
@@ -137,6 +138,72 @@ public static class DbSeeder
             await context.SaveChangesAsync();
         }
     }
+
+    private static async Task SeedPatientUserAsync(
+    AppDbContext context,
+    UserManager<ApplicationUser> userManager)
+{
+    const string patientEmail = "patient@batoclinic.com";
+    const string patientPassword = "Password123!";
+
+    var existingPatient = await userManager.FindByEmailAsync(patientEmail);
+
+    if (existingPatient is not null)
+    {
+        var existingProfile = await context.PatientProfiles
+            .AnyAsync(profile => profile.UserId == existingPatient.Id);
+
+        if (!existingProfile)
+        {
+            context.PatientProfiles.Add(new PatientProfile
+            {
+                UserId = existingPatient.Id,
+                Gender = "Female",
+                EmergencyContactName = "Family Contact",
+                EmergencyContactPhone = "+96550000004",
+                MedicalNotes = "No known allergies.",
+                VipStatus = false,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        return;
+    }
+
+    var patient = new ApplicationUser
+    {
+        FullName = "Aisha Ahmed",
+        UserName = patientEmail,
+        Email = patientEmail,
+        EmailConfirmed = true,
+        PhoneNumber = "+96550000003",
+        RoleType = "Patient",
+        IsActive = true,
+        CreatedAt = DateTime.UtcNow
+    };
+
+    var result = await userManager.CreateAsync(patient, patientPassword);
+
+    if (result.Succeeded)
+    {
+        await userManager.AddToRoleAsync(patient, "Patient");
+
+        context.PatientProfiles.Add(new PatientProfile
+        {
+            UserId = patient.Id,
+            Gender = "Female",
+            EmergencyContactName = "Family Contact",
+            EmergencyContactPhone = "+96550000004",
+            MedicalNotes = "No known allergies.",
+            VipStatus = false,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        await context.SaveChangesAsync();
+    }
+}
 
     private static async Task SeedBranchesAsync(AppDbContext context)
     {

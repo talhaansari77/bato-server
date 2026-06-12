@@ -22,6 +22,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<DoctorService> DoctorServices => Set<DoctorService>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
+    public DbSet<PatientProfile> PatientProfiles => Set<PatientProfile>();
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -103,7 +104,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(x => x.ClinicServiceId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
-        
+
         // Appointment table setup
         builder.Entity<Appointment>(entity =>
         {
@@ -141,5 +142,19 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(x => x.ClinicServiceId);
             entity.HasIndex(x => x.AppointmentDate);
         });
+
+        // PatientProfile table setup
+builder.Entity<PatientProfile>(entity =>
+{
+    entity.Property(x => x.Gender).HasMaxLength(30);
+    entity.Property(x => x.EmergencyContactName).HasMaxLength(150);
+    entity.Property(x => x.EmergencyContactPhone).HasMaxLength(30);
+    entity.Property(x => x.MedicalNotes).HasMaxLength(1000);
+
+    entity.HasOne(x => x.User)
+        .WithOne()
+        .HasForeignKey<PatientProfile>(x => x.UserId)
+        .OnDelete(DeleteBehavior.Cascade);
+});
     }
 }

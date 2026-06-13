@@ -27,6 +27,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<TreatmentSession> TreatmentSessions => Set<TreatmentSession>();
     public DbSet<MedicalRecord> MedicalRecords => Set<MedicalRecord>();
     public DbSet<ProgressPhoto> ProgressPhotos => Set<ProgressPhoto>();
+    public DbSet<Notification> Notifications => Set<Notification>();
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -258,6 +259,23 @@ builder.Entity<ProgressPhoto>(entity =>
     entity.HasIndex(x => x.PatientProfileId);
     entity.HasIndex(x => x.TreatmentPlanId);
     entity.HasIndex(x => x.TakenAt);
+});
+
+// Notification table setup
+builder.Entity<Notification>(entity =>
+{
+    entity.Property(x => x.Title).HasMaxLength(150).IsRequired();
+    entity.Property(x => x.Message).HasMaxLength(1000).IsRequired();
+    entity.Property(x => x.Type).HasMaxLength(50).IsRequired();
+
+    entity.HasOne(x => x.User)
+        .WithMany()
+        .HasForeignKey(x => x.UserId)
+        .OnDelete(DeleteBehavior.Cascade);
+
+    entity.HasIndex(x => x.UserId);
+    entity.HasIndex(x => x.IsRead);
+    entity.HasIndex(x => x.CreatedAt);
 });
     }
 }

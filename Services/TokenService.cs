@@ -6,6 +6,8 @@ using BatoClinic.Api.Entities;
 using BatoClinic.Api.Interfaces;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using System.Security.Cryptography;
+
 
 namespace BatoClinic.Api.Services;
 
@@ -13,6 +15,24 @@ namespace BatoClinic.Api.Services;
 public class TokenService : ITokenService
 {
     private readonly JwtSettings _jwtSettings;
+
+    public string CreateRefreshToken()
+    {
+        // RandomNumberGenerator creates a secure random token.
+        // This token is sent to the mobile app once, and only its hash is saved in DB.
+        var randomBytes = RandomNumberGenerator.GetBytes(64);
+
+        return Convert.ToBase64String(randomBytes);
+    }
+
+    public string HashToken(string token)
+    {
+        // We do not store refresh tokens directly in DB.
+        // We store a SHA256 hash, similar idea to not storing plain passwords.
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+
+        return Convert.ToBase64String(bytes);
+    }
 
     // IOptions<JwtSettings> gives us Jwt values from appsettings.json.
     public TokenService(IOptions<JwtSettings> jwtOptions)

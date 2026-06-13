@@ -6,7 +6,8 @@ using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-
+using BatoClinic.Api.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace BatoClinic.Api.Controllers;
 
@@ -16,15 +17,18 @@ public class AuthController : ControllerBase
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ITokenService _tokenService;
+    private readonly AppDbContext _context;
 
     // UserManager is from ASP.NET Core Identity.
     // It handles creating users, checking passwords, assigning roles, etc.
     public AuthController(
-        UserManager<ApplicationUser> userManager,
-        ITokenService tokenService)
+    UserManager<ApplicationUser> userManager,
+    ITokenService tokenService,
+    AppDbContext context)
     {
         _userManager = userManager;
         _tokenService = tokenService;
+        _context = context;
     }
 
     // POST /api/auth/register
@@ -88,6 +92,7 @@ public class AuthController : ControllerBase
 
         var roles = await _userManager.GetRolesAsync(user);
         var token = _tokenService.CreateToken(user, roles);
+        var refreshToken = await CreateAndSaveRefreshTokenAsync(user);
 
         return Ok(new AuthResponseDto
         {
@@ -95,7 +100,8 @@ public class AuthController : ControllerBase
             FullName = user.FullName,
             Email = user.Email ?? string.Empty,
             Role = user.RoleType,
-            Token = token
+            Token = token,
+            RefreshToken = refreshToken
         });
     }
 
@@ -130,6 +136,7 @@ public class AuthController : ControllerBase
 
         var roles = await _userManager.GetRolesAsync(user);
         var token = _tokenService.CreateToken(user, roles);
+        var refreshToken = await CreateAndSaveRefreshTokenAsync(user);
 
         return Ok(new AuthResponseDto
         {
@@ -137,7 +144,8 @@ public class AuthController : ControllerBase
             FullName = user.FullName,
             Email = user.Email ?? string.Empty,
             Role = user.RoleType,
-            Token = token
+            Token = token,
+            RefreshToken = refreshToken
         });
     }
     // GET /api/auth/me
@@ -196,15 +204,103 @@ public class AuthController : ControllerBase
             IsActive = user.IsActive
         });
     }
-    // GET /api/auth/ping
-    // Simple test endpoint to confirm AuthController is reachable.
-    [HttpGet("ping")]
-    public ActionResult Ping()
+    // POST /api/auth/refresh
+    // Uses a valid refresh token to issue a new access token and new refresh token.
+    [HttpPost("refresh")]
+    public async Task<ActionResult<AuthResponseDto>> RefreshToken(RefreshTokenRequestDto dto)
     {
-        return Ok(new
+        if (string.IsNullOrWhiteSpace(dto.RefreshToken))
         {
-            message = "Auth controller is working"
+            return BadRequest(new { message = "Refresh token is required" });
+        }
+
+        var tokenHash = _tokenService.HashToken(dto.RefreshToken);
+
+        var savedToken = await _context.RefreshTokens
+            .Include(token => token.User)
+            .FirstOrDefaultAsync(token =>
+                token.TokenHash == tokenHash &&
+                token.RevokedAt == null &&
+                token.ExpiresAt > DateTime.UtcNow);
+
+        if (savedToken is null || savedToken.User is null || !savedToken.User.IsActive)
+        {
+            return Unauthorized(new { message = "Invalid refresh token" });
+        }
+
+        // Refresh token rotation:
+        // revoke old refresh token and create a new one.
+        savedToken.RevokedAt = DateTime.UtcNow;
+
+        var roles = await _userManager.GetRolesAsync(savedToken.User);
+        var newAccessToken = _tokenService.CreateToken(savedToken.User, roles);
+        var newRefreshToken = _tokenService.CreateRefreshToken();
+
+        _context.RefreshTokens.Add(new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = savedToken.User.Id,
+            TokenHash = _tokenService.HashToken(newRefreshToken),
+            ExpiresAt = DateTime.UtcNow.AddDays(30),
+            CreatedAt = DateTime.UtcNow
         });
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new AuthResponseDto
+        {
+            UserId = savedToken.User.Id,
+            FullName = savedToken.User.FullName,
+            Email = savedToken.User.Email ?? string.Empty,
+            Role = savedToken.User.RoleType,
+            Token = newAccessToken,
+            RefreshToken = newRefreshToken
+        });
+    }
+    // POST /api/auth/logout
+    // Revokes a refresh token so it cannot be used again.
+    [HttpPost("logout")]
+    public async Task<ActionResult> Logout(LogoutDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto.RefreshToken))
+        {
+            return BadRequest(new { message = "Refresh token is required" });
+        }
+
+        var tokenHash = _tokenService.HashToken(dto.RefreshToken);
+
+        var savedToken = await _context.RefreshTokens
+            .FirstOrDefaultAsync(token =>
+                token.TokenHash == tokenHash &&
+                token.RevokedAt == null);
+
+        if (savedToken is not null)
+        {
+            savedToken.RevokedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+        }
+
+        return Ok(new { message = "Logged out successfully" });
+    }
+
+
+    private async Task<string> CreateAndSaveRefreshTokenAsync(ApplicationUser user)
+    {
+        var refreshToken = _tokenService.CreateRefreshToken();
+
+        var tokenEntity = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            TokenHash = _tokenService.HashToken(refreshToken),
+            ExpiresAt = DateTime.UtcNow.AddDays(30),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.RefreshTokens.Add(tokenEntity);
+        await _context.SaveChangesAsync();
+
+        return refreshToken;
     }
 }
 

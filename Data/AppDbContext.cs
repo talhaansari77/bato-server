@@ -28,6 +28,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<MedicalRecord> MedicalRecords => Set<MedicalRecord>();
     public DbSet<ProgressPhoto> ProgressPhotos => Set<ProgressPhoto>();
     public DbSet<Notification> Notifications => Set<Notification>();
+
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -276,6 +278,21 @@ builder.Entity<Notification>(entity =>
     entity.HasIndex(x => x.UserId);
     entity.HasIndex(x => x.IsRead);
     entity.HasIndex(x => x.CreatedAt);
+});
+
+// RefreshToken table setup
+builder.Entity<RefreshToken>(entity =>
+{
+    entity.Property(x => x.TokenHash).HasMaxLength(500).IsRequired();
+
+    entity.HasOne(x => x.User)
+        .WithMany()
+        .HasForeignKey(x => x.UserId)
+        .OnDelete(DeleteBehavior.Cascade);
+
+    entity.HasIndex(x => x.UserId);
+    entity.HasIndex(x => x.TokenHash);
+    entity.HasIndex(x => x.ExpiresAt);
 });
     }
 }

@@ -6,6 +6,7 @@ using BatoClinic.Api.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using BatoClinic.Api.Helpers;
 
 namespace BatoClinic.Api.Controllers;
 
@@ -532,64 +533,64 @@ public class AppointmentsController : ControllerBase
     }
 
     // PATCH /api/appointments/{id}/no-show
-// Doctor can mark their own appointment as no-show.
-// Admin can mark any appointment as no-show.
-[Authorize(Roles = "Doctor,Admin")]
-[HttpPatch("{id:guid}/no-show")]
-public async Task<ActionResult<AppointmentResponseDto>> MarkAppointmentNoShow(Guid id)
-{
-    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-    var role = User.FindFirstValue(ClaimTypes.Role);
-
-    if (string.IsNullOrWhiteSpace(userId))
+    // Doctor can mark their own appointment as no-show.
+    // Admin can mark any appointment as no-show.
+    [Authorize(Roles = "Doctor,Admin")]
+    [HttpPatch("{id:guid}/no-show")]
+    public async Task<ActionResult<AppointmentResponseDto>> MarkAppointmentNoShow(Guid id)
     {
-        return Unauthorized(new { message = "Invalid token" });
-    }
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var role = User.FindFirstValue(ClaimTypes.Role);
 
-    var appointment = await _context.Appointments
-        .Include(item => item.PatientUser)
-        .Include(item => item.DoctorProfile!)
-            .ThenInclude(doctor => doctor.User)
-        .Include(item => item.ClinicService)
-        .Include(item => item.Branch)
-        .FirstOrDefaultAsync(item => item.Id == id);
-
-    if (appointment is null)
-    {
-        return NotFound(new { message = "Appointment not found" });
-    }
-
-    var isAdmin = role == "Admin";
-
-    if (!isAdmin)
-    {
-        var doctorProfile = await _context.DoctorProfiles
-            .FirstOrDefaultAsync(profile => profile.UserId == userId);
-
-        if (doctorProfile is null || appointment.DoctorProfileId != doctorProfile.Id)
+        if (string.IsNullOrWhiteSpace(userId))
         {
-            return Forbid();
+            return Unauthorized(new { message = "Invalid token" });
         }
-    }
 
-    if (appointment.Status is
-        AppointmentStatus.Cancelled or
-        AppointmentStatus.Rejected or
-        AppointmentStatus.Refunded or
-        AppointmentStatus.Completed)
-    {
-        return BadRequest(new
+        var appointment = await _context.Appointments
+            .Include(item => item.PatientUser)
+            .Include(item => item.DoctorProfile!)
+                .ThenInclude(doctor => doctor.User)
+            .Include(item => item.ClinicService)
+            .Include(item => item.Branch)
+            .FirstOrDefaultAsync(item => item.Id == id);
+
+        if (appointment is null)
         {
-            message = "This appointment cannot be marked as no-show"
-        });
+            return NotFound(new { message = "Appointment not found" });
+        }
+
+        var isAdmin = role == "Admin";
+
+        if (!isAdmin)
+        {
+            var doctorProfile = await _context.DoctorProfiles
+                .FirstOrDefaultAsync(profile => profile.UserId == userId);
+
+            if (doctorProfile is null || appointment.DoctorProfileId != doctorProfile.Id)
+            {
+                return Forbid();
+            }
+        }
+
+        if (appointment.Status is
+            AppointmentStatus.Cancelled or
+            AppointmentStatus.Rejected or
+            AppointmentStatus.Refunded or
+            AppointmentStatus.Completed)
+        {
+            return BadRequest(new
+            {
+                message = "This appointment cannot be marked as no-show"
+            });
+        }
+
+        appointment.Status = AppointmentStatus.NoShow;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(ToAppointmentResponse(appointment));
     }
-
-    appointment.Status = AppointmentStatus.NoShow;
-
-    await _context.SaveChangesAsync();
-
-    return Ok(ToAppointmentResponse(appointment));
-}
 
     // PATCH /api/appointments/{id}/approve
     // Admin-only endpoint.
@@ -623,6 +624,14 @@ public async Task<ActionResult<AppointmentResponseDto>> MarkAppointmentNoShow(Gu
         appointment.PaymentStatus = PaymentStatus.PayAtClinic;
 
         await _context.SaveChangesAsync();
+
+        await NotificationHelper.CreateNotificationAsync(
+            _context,
+            appointment.PatientUserId,
+            "Appointment Approved",
+            "Your appointment has been approved by BATO Clinic.",
+            "Appointment"
+        );
 
         return Ok(ToAppointmentResponse(appointment));
     }
@@ -661,6 +670,16 @@ public async Task<ActionResult<AppointmentResponseDto>> MarkAppointmentNoShow(Gu
         appointment.CancelReason = dto.Reason?.Trim();
 
         await _context.SaveChangesAsync();
+
+        await NotificationHelper.CreateNotificationAsync(
+            _context,
+            appointment.PatientUserId,
+            "Appointment Rejected",
+            string.IsNullOrWhiteSpace(dto.Reason)
+                ? "Your appointment request was rejected by BATO Clinic."
+                : $"Your appointment request was rejected. Reason: {dto.Reason.Trim()}",
+            "Appointment"
+        );
 
         return Ok(ToAppointmentResponse(appointment));
     }
@@ -714,6 +733,16 @@ public async Task<ActionResult<AppointmentResponseDto>> MarkAppointmentNoShow(Gu
         appointment.CancelReason = dto.Reason?.Trim();
 
         await _context.SaveChangesAsync();
+
+        await NotificationHelper.CreateNotificationAsync(
+            _context,
+            appointment.PatientUserId,
+            "Appointment Cancelled",
+            string.IsNullOrWhiteSpace(dto.Reason)
+                ? "Your appointment has been cancelled."
+                : $"Your appointment has been cancelled. Reason: {dto.Reason.Trim()}",
+            "Appointment"
+        );
 
         return Ok(ToAppointmentResponse(appointment));
     }
@@ -817,6 +846,14 @@ public async Task<ActionResult<AppointmentResponseDto>> MarkAppointmentNoShow(Gu
 
         await _context.SaveChangesAsync();
 
+        await NotificationHelper.CreateNotificationAsync(
+            _context,
+            appointment.PatientUserId,
+            "Appointment Rescheduled",
+            $"Your appointment has been rescheduled to {appointment.StartTime:yyyy-MM-dd HH:mm}.",
+            "Appointment"
+        );
+        
         return Ok(ToAppointmentResponse(appointment));
     }
 
